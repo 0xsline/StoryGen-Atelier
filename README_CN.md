@@ -114,9 +114,6 @@ cd frontend && npm run build
 - **示例视频无法播放**：
   README 中的视频演示依赖本地生成的文件。如果你是刚克隆的项目，请先自行生成一段视频，或查看 `exampleImg` 文件夹下的静态预览图。
 
-## License
-本项目采用 ISC License。
-
 ## 示例
 - 分镜风格示例：
   - 赛博朋克示例：![Cyberpunk](exampleImg/Cyberpunk.png)
