@@ -62,7 +62,6 @@ VERTEX_PROJECT_ID=your_gcp_project_id
 VERTEX_LOCATION=us-central1
 VERTEX_VEO_MODEL=veo-3.1-generate-preview
 ```
-> The frontend defaults to pointing to the backend via the `VITE_API_BASE_URL` environment variable (optional). If not set, it defaults to `http://localhost:3005/api`.
 
 ## Quick Start (Recommended)
 No need to start backend and frontend separately. Run from the root directory:
