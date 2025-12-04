@@ -120,16 +120,17 @@ cd frontend && npm run build
 ## 示例
 - 分镜风格示例：
   - 赛博朋克示例：![Cyberpunk](exampleImg/Cyberpunk.png)  
-    <video src="backend/data/videos/full_story_1764762027981.mp4" controls width="900"></video>
+    <video controls src="https://pub-c9f45f60a8cb40528b4a4ada00a44db4.r2.dev/Cyberpunk.mp4" title="Cyberpunk"></video>
 
   - 吉卜力风示例：![Ghibli Style](exampleImg/GhibliStyle.png)  
-    <video src="backend/data/videos/full_story_1764754482908.mp4" controls width="900"></video>
+    <video controls src="https://pub-c9f45f60a8cb40528b4a4ada00a44db4.r2.dev/Ghibli.mp4" title="Ghibli Style"></video>
 
   - 写实示例：![Realism](exampleImg/Realism.png)  
-    <video src="backend/data/videos/full_story_1764616125037.mp4" controls width="900"></video>
+    <video controls src="https://pub-c9f45f60a8cb40528b4a4ada00a44db4.r2.dev/Realism.mp4" title="Realism"></video>
 
   - 国风水墨示例：![Chinese Ink](exampleImg/ChineseInk.png)  
-    <video src="backend/data/videos/full_story_1764757237489.mp4" controls width="900"></video>
+    <video controls src="https://pub-c9f45f60a8cb40528b4a4ada00a44db4.r2.dev/ChineseInk.mp4" title="Chinese Ink"></video>
 
   - 动漫风格示例：![Anime](exampleImg/Anime.png)
-    <video src="backend/data/videos/full_story_1764614944408.mp4" controls width="900"></video>
+    <video controls src="https://pub-c9f45f60a8cb40528b4a4ada00a44db4.r2.dev/Anime.mp4" title="Anime"></video>
+    
