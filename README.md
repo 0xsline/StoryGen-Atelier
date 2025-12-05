@@ -98,6 +98,14 @@ cd frontend && npm run build
 
 ## Examples
 - Storyboard Style Examples:
+   - Anime Style Example：![Anime](exampleImg/Anime.png)
+
+https://github.com/user-attachments/assets/a70279b0-80f7-4b9a-96fb-173e5912d43a
+
+ - <img width="1198" height="1242" alt="image" src="https://github.com/user-attachments/assets/f78a1b54-2490-4d51-80c9-6bb8d41b0b49" />
+
+https://github.com/user-attachments/assets/66bbe81e-34f1-44dd-b648-2a8cb84e5eba
+
   - Cyberpunk Example：![Cyberpunk](exampleImg/Cyberpunk.png)  
 
 https://github.com/user-attachments/assets/ad56e3c8-c14e-48fb-8366-ad22c4e8ea60
@@ -119,9 +127,4 @@ https://github.com/user-attachments/assets/2ca41cbf-2765-4e6b-8e85-8ba0e8e191f5
 https://github.com/user-attachments/assets/99305353-a348-45ca-add7-f9692bccdc95
 
 
-  - Anime Style Example：![Anime](exampleImg/Anime.png)
 
-https://github.com/user-attachments/assets/a70279b0-80f7-4b9a-96fb-173e5912d43a
-
-
-    
