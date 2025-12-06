@@ -389,3 +389,79 @@ body {
   font-size: 32px;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
 }
+
+.style-select .mantine-Select-input {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 10px !important;
+  padding: 10px 14px !important;
+  transition: all 0.2s ease;
+}
+
+.style-select .mantine-Select-input:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+.style-select .mantine-Select-input:focus {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(0, 200, 255, 0.5) !important;
+  box-shadow: 0 0 0 2px rgba(0, 200, 255, 0.15) !important;
+}
+
+.style-select .mantine-Select-dropdown {
+  background: rgba(30, 30, 50, 0.95) !important;
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 12px !important;
+  padding: 6px !important;
+}
+
+.style-select .mantine-Select-option {
+  border-radius: 8px !important;
+  padding: 10px 12px !important;
+  margin: 2px 0;
+  transition: all 0.15s ease;
+}
+
+.style-select .mantine-Select-option:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+.style-select .mantine-Select-option[data-selected="true"] {
+  background: linear-gradient(135deg, rgba(0, 200, 255, 0.2), rgba(100, 100, 255, 0.2)) !important;
+  color: #fff !important;
+}
+
+.glass-panel .mantine-Textarea-input {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  padding: 12px 0 !important;
+}
+
+.glass-panel .mantine-Textarea-input:hover,
+.glass-panel .mantine-Textarea-input:focus {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.glass-panel .mantine-Textarea-input::-webkit-scrollbar {
+  width: 6px;
+}
+
+.glass-panel .mantine-Textarea-input::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+}
+
+.glass-panel .mantine-Textarea-input::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+.glass-panel .mantine-Textarea-input::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}

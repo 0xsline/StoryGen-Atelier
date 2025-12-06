@@ -115,10 +115,9 @@ const startVideoJobVertex = async ({ prompt, model, firstFrame, lastFrame, durat
   return json.name; 
 };
 
-const pollOperationVertex = async (name, maxAttempts = 60, delayMs = 10000) => {
+const pollOperationVertex = async (name, maxAttempts = 60, delayMs = 40000) => {
   const projectId = process.env.VERTEX_PROJECT_ID;
   const location = process.env.VERTEX_LOCATION || 'us-central1';
-  log('vertex_poll_auth_request', { scopes: ['https://www.googleapis.com/auth/cloud-platform'], location, projectId });
   const auth = new GoogleAuth({ scopes: ['https://www.googleapis.com/auth/cloud-platform'] });
   const client = await auth.getClient();
   const token = await client.getAccessToken();
@@ -253,7 +252,7 @@ exports.generateFullVideoFromShots = async (storyboard) => {
       
       try {
          // Call LLM to analyze visual transition
-         const analysis = await analyzeShotTransition(shotA.imageUrl, shotB.imageUrl);
+         const analysis = await analyzeShotTransition(shotA, shotB);
          
          transitionPlans.push({
            index: i,

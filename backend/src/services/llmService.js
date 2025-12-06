@@ -89,7 +89,8 @@ exports.analyzeShotTransition = async (shotA, shotB) => {
   }
 
   // Function to fetch image and convert to base64 part
-  const getImagePart = async (url) => {
+  const getImagePart = async (shot) => {
+    const url = typeof shot === 'string' ? shot : shot?.imageUrl;
     const { fetch } = require('undici');
     if (!url) return null;
     // Simple check for base64 data URI
@@ -123,6 +124,10 @@ exports.analyzeShotTransition = async (shotA, shotB) => {
        throw new Error("Invalid image inputs for transition analysis.");
     }
 
+    const shotAText = (typeof shotA === 'object' && shotA.shotStory) || '';
+    const shotBText = (typeof shotB === 'object' && shotB.shotStory) || '';
+
+    // Provide labeled frames + narratives so the model can align images with their shot stories.
     const promptParts = [
       { text: `
         Role: Expert Film Director and Cinematographer.
@@ -132,9 +137,15 @@ exports.analyzeShotTransition = async (shotA, shotB) => {
         `
       },
       { text: PROMPT_GUIDE_CONTENT },
+      { text: `Frame A (previous shot) image:` },
+      imagePartA,
+      { text: `Frame A description: ${shotAText || 'No narrative provided.'}` },
+      { text: `Frame B (next shot) image:` },
+      imagePartB,
+      { text: `Frame B description: ${shotBText || 'No narrative provided.'}` },
       { text: `
-        Task: Analyze these two sequential storyboard frames (First Frame -> Last Frame).
-        1. Describe the specific camera movement and visual transition required to bridge these two shots seamlessly (e.g., "Slow dolly zoom in while panning right", "Focus pull from foreground to background").
+        Task: Analyze these two sequential storyboard frames (Frame A -> Frame B).
+        1. Using the "Frame A description" and "Frame B description" as your primary narrative reference (and the images as visual grounding), describe the specific camera movement and visual transition required to bridge these two shots seamlessly (e.g., "Slow dolly zoom in while panning right", "Focus pull from foreground to background").
         2. Determine the optimal duration for this transition to feel natural (MUST be 4, 6, or 8 seconds).
 
         Output ONLY a raw JSON object (no markdown):
@@ -192,48 +203,123 @@ exports.generatePrompts = async (sentence, shotCount = 6, styleOverride) => {
     });
 
     const promptParts = [
-      { text: `
-        Role: You are a film storyboard artist.
-        Context: You are creating prompts for Google's Veo video generation model.
-        
-        IMPORTANT SAFETY GUIDELINES:
-        `
-      },
-      { text: PROMPT_GUIDE_CONTENT },
-      { text: `
-        Goal: Create a continuous storyboard with EXACTLY ${shotCount} shots for the story: "${sentence}".
-        Global visual style: ${appliedStyle}.
+  {
+    text: `
+      Role: You are a professional film storyboard artist.
+      Context: You are creating shot-level prompts for Google's Veo video generation model.
 
-        *** CRITICAL NARRATIVE REQUIREMENTS ***
-        1. **Continuous Story Arc**: The shots must form a single, unbroken chronological narrative. Do not generate disconnected scenes. 
-           - Use the total shot count (${shotCount}) to pace the story:
-             * Beginning (approx first 25%): Set the scene and introduce the subject.
-             * Middle (approx middle 50%): Action, movement, conflict, or transformation.
-             * End (approx last 25%): Resolution, calm, or final visual statement.
-        2. **Visual Consistency**: 
-           - Define a specific "Hero Subject" (character or object) that appears or is implied in consecutive shots.
-           - Maintain consistent lighting, color palette, and weather unless the story explicitly changes them.
-        3. **Seamless Flow**: 
-           - Write each prompt as if it picks up IMMEDIATELY where the previous shot left off.
-           - Use "connective tissue" in your descriptions (e.g., "Continuing from the previous angle...", "The character turns...", "Following the object...").
-        4. **Causal Relationship (因果关系)**: 
-           - Each shot MUST have a clear cause-and-effect relationship with the previous shot.
-           - Explain WHY the transition happens (e.g., "Because the rain stopped...", "As a result of...", "This leads to...").
-           - Avoid random scene jumps; every shot should be a logical consequence of the previous one.
-        5. **Temporal Continuity (时间顺序)**:
-           - Maintain strict chronological order. No flashbacks or time jumps unless explicitly requested.
-           - Use time markers in shotStory (e.g., "紧接着", "随后", "与此同时", "最终").
+      Your job:
+      - Take the user's story and style as inspiration.
+      - BUT you must ALWAYS follow the safety guidelines and adjust the story if needed.
+      
+      IMPORTANT SAFETY OVERRIDES:
+      - If any part of the story ("${sentence}") or the visual style ("${appliedStyle}") suggests
+        sexual content, graphic violence, self-harm, glorified death, hate, or illegal activities,
+        you MUST rewrite that part into a safe, neutral, metaphorical, or positive version.
+      - All characters must be completely fictional.DO NOT use any real-world person names.
+        Use generic role descriptions like "the main hero", "the woman", "the uncle", etc.,
+        instead of specific names.
+      - Avoid phrases that imply falling into a void or abyss, being swallowed by darkness,
+        or losing hope (e.g., "void", "deep, dark abyss", "descent into darkness").
+        For deep-sea or night scenes, use calm, expansive, or mysterious descriptions instead.
+      - Do NOT create realistic depictions of specific real people or celebrities.
+      - Do NOT include real-world personal data (names + addresses, phone numbers, IDs, etc.).
+      - All human characters must be clearly adults in safe, non-sexualized, non-exploitative contexts.
+      - It is ALWAYS better to be slightly less dramatic than to risk violating safety.
 
-        Output format: ONLY a raw JSON array (no code fences).
-        Required fields per shot:
-        - shot: integer (1..${shotCount})
-        - prompt: detailed image generation prompt that includes the shared style, visual anchors, and clear action. MUST BE SAFE.
-        - duration: integer, MUST be exactly 4, 6, or 8 (seconds). No other values allowed.
-        - description: 简洁的中文动作摘要，明确说明叙事进展（必须是中文）。
-        - shotStory: A narrative description in Chinese (2-3 sentences) that tells the story of this shot with clear causal connection to the previous shot. Use connective words like "因此"、"于是"、"紧接着"、"随后" to show cause-and-effect.
-        - heroSubject: (ONLY in shot 1) A detailed character/subject description for visual consistency across all shots. Include: species/type, skin/fur color, body build, clothing, distinctive features, accessories. Example: "A muscular purple-skinned man with a bald head, wearing a tattered white lab coat, carrying a giant syringe with green glowing liquid, has stitches on his face and arms". This will be prepended to all subsequent shot prompts to maintain character consistency.
-      `}
-    ];
+      NEVER include these guidelines themselves in any shot.prompt text.
+    `
+  },
+  { text: PROMPT_GUIDE_CONTENT },
+  {
+    text: `
+      Goal: Create a continuous storyboard with EXACTLY ${shotCount} shots for the story: "${sentence}".
+      Global visual style: ${appliedStyle}.
+
+      SAFETY VS. STORY:
+      - The story and style are inspiration, not absolute truth.
+      - If following the raw story would break safety rules, you must gently alter the events,
+        the visuals, or the tone so that everything stays safe and suitable for a general audience.
+
+      *** CRITICAL NARRATIVE REQUIREMENTS ***
+      1. Continuous Story Arc:
+         - The shots must form a single, unbroken chronological narrative.
+         - Do NOT generate disconnected or random scenes.
+         - Use the total shot count (${shotCount}) to pace the story:
+           * Beginning (approx first 25%): Set the scene and introduce the hero subject.
+           * Middle (approx middle 50%): Action, movement, change, or transformation.
+           * End (approx last 25%): Resolution, calm, or a clear final visual statement.
+
+      2. Visual Consistency:
+         - Define a specific "Hero Subject" (character or object) that appears or is implied
+           in consecutive shots.
+         - Maintain consistent appearance for the hero (body type, clothing, colors, key props).
+         - Maintain consistent lighting, color palette, and weather unless the story clearly
+           requires a change. If it changes, describe the change explicitly.
+
+      3. Seamless Flow:
+         - Each shot must feel like it continues IMMEDIATELY from where the previous shot ended.
+         - Use connective phrasing in English inside the prompt when needed
+           (e.g., "Continuing from the previous angle...", "The camera follows the character as...",
+           "Now the viewpoint shifts slightly...").
+         - No sudden teleports or unexplained jumps in space or time.
+
+      4. Causal Relationship (因果关系):
+         - Each shot MUST have a clear cause-and-effect relationship with the previous shot.
+         - In the Chinese shotStory, explicitly explain WHY the new shot occurs, using words
+           like "因此"、"于是"、"紧接着"、"随后" 来说明因果和顺承关系。
+         - Avoid random scene jumps; every shot should be a logical consequence of the previous one.
+
+      5. Temporal Continuity (时间顺序):
+         - Maintain strict chronological order from shot 1 to shot ${shotCount}.
+         - Unless the user explicitly requests flashbacks, do NOT use time jumps.
+         - Use time markers in shotStory (e.g., "紧接着", "随后", "与此同时", "最终") to
+           emphasize the timeline progression.
+
+      Output format: ONLY a raw JSON array (no code fences, no comments, no extra text).
+      Each element of the array must be a JSON object with the following fields:
+
+      - shot: integer (1..${shotCount}).
+
+      - prompt:
+        * A detailed ENGLISH image/video generation prompt.
+        * MUST include the shared global style, clear visual anchors, and the main action.
+        * MUST be SAFE and comply with all safety rules above.
+        * Do NOT include Chinese in this field.
+        * Do NOT include any meta instructions, JSON keys, or safety guideline text.
+
+      - duration:
+        * integer, MUST be exactly 4, 6, or 8 (seconds).
+        * No other values allowed.
+
+      - description:
+        * A concise Chinese summary of the on-screen action (1 sentence).
+        * 必须是中文，清楚说明当前镜头画面在做什么、叙事推进了什么。
+        * 不要加入元信息或技术术语，只描述画面。
+
+      - shotStory:
+        * 2-3 sentences in Chinese.
+        * 叙述这一镜头在故事中的角色，强调它与上一镜头的因果和时间顺承关系。
+        * 必须使用连接词（例如 "因此"、"于是"、"紧接着"、"随后"、"与此同时"、"最终"），
+          表达清晰的因果链和时间线推进。
+        * 不要重复上一镜头的全部内容，只在必要程度上回顾，然后推动故事向前发展。
+
+      - heroSubject:
+        * ONLY present in shot 1.
+        * A detailed ENGLISH description of the main character or subject for visual consistency.
+        * Include: species/type, skin/fur color, body build, clothing, distinctive features, accessories.
+        * Example (SAFE): "A muscular purple-skinned adult man with a bald head, wearing a clean white lab coat over a black t-shirt and dark pants, carrying a slim tablet computer, with a faint scar on his left cheek."
+        * This heroSubject description will be prepended to all subsequent shot prompts to keep
+          the character visually consistent.
+
+      Remember:
+      - Return ONLY the JSON array, nothing else.
+      - Do NOT wrap the JSON in backticks or markdown.
+      - Do NOT explain your reasoning or add comments.
+    `
+  }
+];
+
 
     const result = await retry(() => model.generateContent(promptParts));
     const response = await result.response;

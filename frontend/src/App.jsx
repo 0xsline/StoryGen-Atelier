@@ -404,7 +404,8 @@ function App() {
                   value={sentence}
                   onChange={(e) => setSentence(e.target.value)}
                   placeholder="输入一句话，例如：在雨中的霓虹都市里，一只猫寻找失落的记忆。"
-                  minRows={3}
+                  minRows={1}
+                  maxRows={4}
                   required
                   autosize
                 />
@@ -421,6 +422,7 @@ function App() {
                     onChange={(val) => setStyleOption(val || 'cyberpunk')}
                     placeholder="选择风格"
                     maw={240}
+                    className="style-select"
                   />
                   {styleOption === 'custom' ? (
                     <TextInput
