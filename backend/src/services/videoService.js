@@ -169,6 +169,196 @@ const extractVideoUriVertex = (op) => {
     return null;
 };
 
+const MINIMAX_VIDEO_REGION_HOSTS = {
+  global_en: 'https://api.minimax.io/v2',
+  cn_zh: 'https://api.minimaxi.com/v2',
+};
+
+const MINIMAX_VIDEO_ROLES = new Set([
+  'first_frame',
+  'last_frame',
+  'reference_image',
+  'reference_video',
+  'reference_audio',
+]);
+
+const getMiniMaxVideoBaseUrl = () => {
+  const explicit = process.env.MINIMAX_VIDEO_API_HOST;
+  if (explicit && explicit.trim() !== '') return explicit.trim().replace(/\/+$/, '');
+  const region = (process.env.MINIMAX_API_REGION || 'global_en').trim();
+  return MINIMAX_VIDEO_REGION_HOSTS[region] || MINIMAX_VIDEO_REGION_HOSTS.global_en;
+};
+
+const getMiniMaxVideoApiKey = () => {
+  const apiKey = process.env.MINIMAX_API_KEY;
+  if (!apiKey || apiKey.trim() === '') {
+    throw new Error('MINIMAX_API_KEY is required for MiniMax video generation');
+  }
+  return apiKey.trim();
+};
+
+const normalizeMiniMaxVideoDuration = (durationSeconds) => {
+  const configured = Number.parseInt(process.env.MINIMAX_VIDEO_DURATION || '', 10);
+  const requested = Number.parseInt(durationSeconds, 10);
+  const duration = Number.isInteger(configured) ? configured : requested;
+  if (!Number.isInteger(duration)) return 6;
+  return Math.min(15, Math.max(4, duration));
+};
+
+const buildMiniMaxImageContent = (imageBytes, role) => {
+  if (!imageBytes) return null;
+  return {
+    type: 'image_url',
+    image_url: {
+      url: `data:${imageBytes.mimeType};base64,${imageBytes.bytesBase64Encoded}`,
+    },
+    role,
+  };
+};
+
+const buildMiniMaxVideoContent = ({ prompt, firstFrame, lastFrame, referenceMedia = [] }) => {
+  const text = (prompt || '').trim();
+  if (!text) throw new Error('A prompt is required for MiniMax video generation');
+
+  const content = [{ type: 'text', text: text.slice(0, 7000) }];
+  const references = Array.isArray(referenceMedia)
+    ? referenceMedia.filter((item) => item && MINIMAX_VIDEO_ROLES.has(item.role))
+    : [];
+  const hasReferences = references.some((item) => item.role.startsWith('reference_'));
+
+  if (hasReferences && (firstFrame || lastFrame)) {
+    throw new Error('MiniMax reference media cannot be mixed with first or last frame inputs');
+  }
+
+  if (hasReferences) {
+    for (const item of references) {
+      if (item.role === 'reference_image') {
+        content.push({ type: 'image_url', image_url: { url: item.url }, role: item.role });
+      } else if (item.role === 'reference_video') {
+        content.push({ type: 'video_url', video_url: { url: item.url }, role: item.role });
+      } else if (item.role === 'reference_audio') {
+        content.push({ type: 'audio_url', audio_url: { url: item.url }, role: item.role });
+      }
+    }
+    return content;
+  }
+
+  const firstContent = buildMiniMaxImageContent(firstFrame, 'first_frame');
+  const lastContent = buildMiniMaxImageContent(lastFrame, 'last_frame');
+  if (firstContent) content.push(firstContent);
+  if (lastContent) content.push(lastContent);
+
+  return content;
+};
+
+const requestMiniMaxVideo = async (pathSuffix, options = {}) => {
+  const baseUrl = getMiniMaxVideoBaseUrl();
+  const res = await fetch(`${baseUrl}${pathSuffix}`, {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      Authorization: `Bearer ${getMiniMaxVideoApiKey()}`,
+    },
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`MiniMax video request failed: ${res.status} ${text}`);
+  }
+
+  return await res.json();
+};
+
+const createMiniMaxVideoTask = async ({ prompt, model, firstFrame, lastFrame, durationSeconds, referenceMedia }) => {
+  const duration = normalizeMiniMaxVideoDuration(durationSeconds);
+  const body = {
+    model: model || process.env.MINIMAX_VIDEO_MODEL || 'MiniMax-H3',
+    content: buildMiniMaxVideoContent({ prompt, firstFrame, lastFrame, referenceMedia }),
+    resolution: process.env.MINIMAX_VIDEO_RESOLUTION || '2K',
+    duration,
+    ratio: process.env.MINIMAX_VIDEO_RATIO || 'adaptive',
+  };
+
+  if (process.env.MINIMAX_VIDEO_CALLBACK_URL) {
+    body.callback_url = process.env.MINIMAX_VIDEO_CALLBACK_URL;
+  }
+
+  log('minimax_video_create_request', { model: body.model, duration: body.duration, resolution: body.resolution });
+  const json = await requestMiniMaxVideo('/video_generation', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!json.task_id) throw new Error('MiniMax did not return a task_id');
+  return json.task_id;
+};
+
+const queryMiniMaxVideoTask = async (taskId) => {
+  if (!taskId) throw new Error('task_id is required for MiniMax video query');
+  return await requestMiniMaxVideo(`/query/video_generation/${encodeURIComponent(taskId)}`, { method: 'GET' });
+};
+
+const listMiniMaxVideoTasks = async (params = {}) => {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === '') continue;
+    if (Array.isArray(value)) {
+      for (const item of value) query.append(key, item);
+    } else {
+      query.set(key, value);
+    }
+  }
+  const suffix = query.toString() ? `/query/video_generation?${query.toString()}` : '/query/video_generation';
+  return await requestMiniMaxVideo(suffix, { method: 'GET' });
+};
+
+const deleteMiniMaxVideoTask = async (taskId) => {
+  if (!taskId) throw new Error('task_id is required for MiniMax video delete');
+  return await requestMiniMaxVideo(`/video_generation/${encodeURIComponent(taskId)}`, { method: 'DELETE' });
+};
+
+const pollMiniMaxVideoTask = async (taskId, maxAttempts = 60, delayMs = 10000) => {
+  for (let i = 0; i < maxAttempts; i++) {
+    const json = await queryMiniMaxVideoTask(taskId);
+    const task = json.task || {};
+    const status = String(task.status || '').toLowerCase();
+    if (['succeeded', 'success', 'completed'].includes(status)) {
+      const url = task?.content?.url || task?.content?.[0]?.url || task?.content?.[0]?.video_url?.url;
+      if (!url) throw new Error('MiniMax task succeeded but returned no video URL');
+      return url;
+    }
+    if (['failed', 'fail', 'cancelled', 'canceled', 'expired'].includes(status)) {
+      const message = task?.error?.message || task.status;
+      throw new Error(`MiniMax video generation failed: ${message}`);
+    }
+    await new Promise((r) => setTimeout(r, delayMs));
+  }
+  throw new Error('MiniMax video generation timed out');
+};
+
+const generateClipWithMiniMax = async ({ prompt, model, firstFrame, lastFrame, durationSeconds, referenceMedia }) => {
+  const taskId = await createMiniMaxVideoTask({
+    prompt,
+    model,
+    firstFrame,
+    lastFrame,
+    durationSeconds,
+    referenceMedia,
+  });
+  log('minimax_video_task_started', { taskId });
+
+  const downloadUrl = await pollMiniMaxVideoTask(taskId);
+  const fileRes = await fetch(downloadUrl);
+  if (!fileRes.ok) throw new Error(`Failed to download MiniMax video: ${fileRes.status}`);
+
+  const buffer = Buffer.from(await fileRes.arrayBuffer());
+  const fileName = `clip_minimax_${Date.now()}.mp4`;
+  const outPath = path.join(videoDir, fileName);
+  await fs.promises.writeFile(outPath, buffer);
+  return { video_path: outPath, provider: 'minimax' };
+};
+
 const generateClipWithVertex = async ({ prompt, model, firstFrame, lastFrame, durationSeconds }) => {
   try {
     const opName = await startVideoJobVertex({
@@ -204,10 +394,25 @@ const generateClipWithVertex = async ({ prompt, model, firstFrame, lastFrame, du
   return { video_path: null, provider: 'vertex' }; // Should not reach here
 };
 
-// Main function: Vertex only (Gemini video path disabled)
+// Main function: select the configured video provider.
 const generateClipDirectly = async (params) => {
     const firstFrame = await readImageBytes(params.first_frame_url);
     const lastFrame = await readImageBytes(params.last_frame_url);
+
+    const provider = (process.env.VIDEO_PROVIDER || '').trim().toLowerCase();
+    const useMiniMax = provider === 'minimax'
+      || (provider === '' && process.env.MINIMAX_API_KEY && process.env.MINIMAX_API_KEY.trim() !== '');
+
+    if (useMiniMax) {
+      return await generateClipWithMiniMax({
+        prompt: params.prompt,
+        model: params.model || process.env.MINIMAX_VIDEO_MODEL,
+        firstFrame,
+        lastFrame,
+        durationSeconds: params.duration_seconds,
+        referenceMedia: params.reference_media,
+      });
+    }
     
     const model = params.model || 'veo-3.1-generate-preview';
     const shared = {
@@ -404,4 +609,7 @@ exports.generateSequencedVideo = async (storyboard, segments) => {
 exports.generateVideosForSegments = async (storyboard, segments) => {
     return exports.generateFullVideoFromShots(storyboard);
 };
+exports.queryMiniMaxVideoTask = queryMiniMaxVideoTask;
+exports.listMiniMaxVideoTasks = listMiniMaxVideoTasks;
+exports.deleteMiniMaxVideoTask = deleteMiniMaxVideoTask;
 // Removed exports.stitchVideos as it's now internal to generateFullVideoFromShots
