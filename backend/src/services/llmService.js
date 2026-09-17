@@ -1,4 +1,5 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+const miniMaxTextService = require('./minimaxTextService');
 const { log } = require('../utils/logger');
 const fs = require('fs');
 const path = require('path');
@@ -67,6 +68,36 @@ const retry = async (fn, attempts = 2, delayMs = 400) => {
   throw lastErr;
 };
 
+const isMiniMaxTextProvider = () => (process.env.LLM_PROVIDER || '').trim().toLowerCase() === 'minimax';
+
+const hasValidApiKey = (apiKey) => Boolean(
+  apiKey && apiKey.trim() !== '' && !apiKey.startsWith('your_')
+);
+
+const hasConfiguredTextApiKey = () => (
+  isMiniMaxTextProvider()
+    ? miniMaxTextService.hasApiKey()
+    : hasValidApiKey(process.env.GEMINI_API_KEY)
+);
+
+const getConfiguredTextModel = (fallbackModel = '') => (
+  isMiniMaxTextProvider() ? miniMaxTextService.getModel() : fallbackModel
+);
+
+const generateTextContent = async (promptParts, fallbackModel) => {
+  if (isMiniMaxTextProvider()) {
+    return await miniMaxTextService.generateContent(promptParts);
+  }
+
+  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  const model = genAI.getGenerativeModel({ model: fallbackModel });
+  const result = await model.generateContent(promptParts);
+  const response = await result.response;
+  return response.text();
+};
+
+exports.getConfiguredTextModel = getConfiguredTextModel;
+
 // Read the Prompt Guide once
 let PROMPT_GUIDE_CONTENT = "";
 try {
@@ -81,11 +112,10 @@ try {
 }
 
 exports.analyzeShotTransition = async (shotA, shotB) => {
-  const apiKey = process.env.GEMINI_API_KEY;
   const geminiModel = process.env.GEMINI_MODEL || "gemini-2.5-flash"; // Using Flash for speed
 
-  if (!apiKey || apiKey.trim() === '' || apiKey.startsWith('your_')) {
-    throw new Error("No valid GEMINI_API_KEY found for transition analysis.");
+  if (!hasConfiguredTextApiKey()) {
+    throw new Error("No valid API key found for transition analysis.");
   }
 
   // Function to fetch image and convert to base64 part
@@ -114,9 +144,6 @@ exports.analyzeShotTransition = async (shotA, shotB) => {
   };
 
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: geminiModel });
-
     const imagePartA = await getImagePart(shotA);
     const imagePartB = await getImagePart(shotB);
 
@@ -131,7 +158,7 @@ exports.analyzeShotTransition = async (shotA, shotB) => {
     const promptParts = [
       { text: `
         Role: Expert Film Director and Cinematographer.
-        Context: You are generating prompts for Google's Veo video generation model.
+        Context: You are generating prompts for the configured video generation model.
         
         IMPORTANT SAFETY GUIDELINES:
         `
@@ -156,9 +183,7 @@ exports.analyzeShotTransition = async (shotA, shotB) => {
       `}
     ];
 
-    const result = await retry(() => model.generateContent(promptParts));
-    const response = await result.response;
-    let text = response.text();
+    let text = await retry(() => generateTextContent(promptParts, geminiModel));
     text = text.replace(/```json/g, "").replace(/```/g, "").trim();
     
     try {
@@ -183,30 +208,24 @@ exports.analyzeShotTransition = async (shotA, shotB) => {
 };
 
 exports.generatePrompts = async (sentence, shotCount = 6, styleOverride) => {
-  const apiKey = process.env.GEMINI_API_KEY;
   const geminiTextModel = process.env.GEMINI_TEXT_MODEL || "gemini-3-pro-preview";
+  const configuredTextModel = getConfiguredTextModel(geminiTextModel);
   const appliedStyle = styleOverride && styleOverride.trim() !== '' ? styleOverride.trim() : BASE_IMAGE_STYLE;
 
   // Check if API key is not set OR if it's empty OR if it's still the placeholder value
-  if (!apiKey || apiKey.trim() === '' || apiKey.startsWith('your_')) {
+  if (!hasConfiguredTextApiKey()) {
     log('storyboard_llm_fallback_no_key', { requestedShots: shotCount });
     return resizeStoryboard(FALLBACK_STORYBOARD, shotCount);
   }
 
-  log('storyboard_llm_start', { model: geminiTextModel, requestedShots: shotCount });
+  log('storyboard_llm_start', { model: configuredTextModel, requestedShots: shotCount });
 
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-      model: geminiTextModel,
-      // Gemini 3 Pro defaults to 'high' thinking level, which is good for complex reasoning like storyboarding.
-    });
-
     const promptParts = [
   {
     text: `
       Role: You are a professional film storyboard artist.
-      Context: You are creating shot-level prompts for Google's Veo video generation model.
+      Context: You are creating shot-level prompts for the configured video generation model.
 
       Your job:
       - Take the user's story and style as inspiration.
@@ -321,9 +340,7 @@ exports.generatePrompts = async (sentence, shotCount = 6, styleOverride) => {
 ];
 
 
-    const result = await retry(() => model.generateContent(promptParts));
-    const response = await result.response;
-    let text = response.text();
+    let text = await retry(() => generateTextContent(promptParts, geminiTextModel));
 
     // Clean up potential markdown formatting
     text = text.replace(/```json/g, "").replace(/```/g, "").trim();
@@ -332,9 +349,9 @@ exports.generatePrompts = async (sentence, shotCount = 6, styleOverride) => {
     return storyboard;
 
   } catch (error) {
-    console.error("Error calling Gemini API:", error);
+    console.error("Error calling text generation API:", error);
     log('storyboard_llm_error', { message: error.message });
-    if (apiKey) {
+    if (hasConfiguredTextApiKey()) {
       // If we have a real key but the request failed, propagate so frontend can show an error instead of stale fallback.
       throw error;
     }
