@@ -86,10 +86,13 @@ chmod +x start_servers.sh
 # Start servers
 ./start_servers.sh
 ```
-The script will automatically:
-1. Start the backend API on port **3005**
-2. Start the frontend interface on port **5180**
-3. Output logs to `backend.log` and `frontend.log` respectively
+On macOS you can also double-click **`start_macos.command`** (run `chmod +x` once). The script will:
+1. Check Node.js 18+ / npm (and warn when ffmpeg is missing)
+2. Install backend + frontend dependencies automatically on the first run
+3. Start the backend API on port **3005** and the frontend on port **5180**
+4. Wait until both ports answer before printing the URL; logs go to `backend.log` / `frontend.log`
+
+On failure it prints the reason plus the tail of the failing log and keeps the window open — the old script backgrounded both servers and exited, so a missing dependency surfaced only as a window that flashed and closed (`Cannot find module 'express'` stayed hidden in the log).
 
 ## Manual Install & Start
 Backend:

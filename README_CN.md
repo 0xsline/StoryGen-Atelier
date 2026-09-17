@@ -85,10 +85,13 @@ chmod +x start_servers.sh
 # 启动服务
 ./start_servers.sh
 ```
-脚本将自动：
-1. 在端口 **3005** 启动后端 API
-2. 在端口 **5180** 启动前端界面
-3. 将日志分别输出到 `backend.log` 和 `frontend.log`
+macOS 也可以直接双击 **`start_macos.command`**（首次可能需要 `chmod +x`）。脚本会：
+1. 检查 Node.js 18+ / npm（缺 ffmpeg 时给出提醒）
+2. 首次运行时自动安装前后端依赖
+3. 在端口 **3005** 启动后端 API、**5180** 启动前端界面
+4. 等两个端口都能响应后才提示访问地址；日志分别写入 `backend.log` / `frontend.log`
+
+启动失败时会打印错误原因和对应日志的末尾几行，并保持窗口不关闭——旧版脚本把服务丢到后台就退出，依赖没装好时只会看到窗口闪退，真实报错（如 `Cannot find module 'express'`）藏在日志里。
 
 ## 手动安装与启动
 后端：
