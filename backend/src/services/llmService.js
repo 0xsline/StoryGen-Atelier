@@ -96,6 +96,11 @@ const generateTextContent = async (promptParts, fallbackModel) => {
   return response.text();
 };
 
+// MiniMax M3 defaults to adaptive thinking and returns the reasoning inline as
+// <think>...</think> inside message.content (M2.x cannot disable it either), so
+// strip reasoning blocks before parsing structured JSON.
+const stripReasoning = (text) => String(text).replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+
 exports.getConfiguredTextModel = getConfiguredTextModel;
 
 // Read the Prompt Guide once
@@ -184,7 +189,7 @@ exports.analyzeShotTransition = async (shotA, shotB) => {
     ];
 
     let text = await retry(() => generateTextContent(promptParts, geminiModel));
-    text = text.replace(/```json/g, "").replace(/```/g, "").trim();
+    text = stripReasoning(text.replace(/```json/g, "").replace(/```/g, ""));
     
     try {
         const parsed = JSON.parse(text);
@@ -342,8 +347,8 @@ exports.generatePrompts = async (sentence, shotCount = 6, styleOverride) => {
 
     let text = await retry(() => generateTextContent(promptParts, geminiTextModel));
 
-    // Clean up potential markdown formatting
-    text = text.replace(/```json/g, "").replace(/```/g, "").trim();
+    // Clean up potential markdown formatting and any inline reasoning blocks
+    text = stripReasoning(text.replace(/```json/g, "").replace(/```/g, ""));
 
     const storyboard = resizeStoryboard(JSON.parse(text), shotCount);
     return storyboard;

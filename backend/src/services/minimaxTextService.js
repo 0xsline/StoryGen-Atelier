@@ -29,6 +29,11 @@ const hasApiKey = (env = process.env) => {
 
 const getModel = (env = process.env) => getConfig(env).model;
 
+const buildThinkingParam = (env = process.env) => {
+  const value = (env.MINIMAX_TEXT_THINKING || '').trim().toLowerCase();
+  return value === 'disabled' || value === 'adaptive' ? { thinking: { type: value } } : {};
+};
+
 const toMessageContent = (promptParts) => {
   const content = promptParts.map((part) => {
     if (typeof part?.text === 'string') {
@@ -89,6 +94,10 @@ const generateContent = async (promptParts, options = {}) => {
         },
       ],
       stream: false,
+      // M3 defaults to adaptive thinking; set MINIMAX_TEXT_THINKING=disabled to
+      // skip reasoning for structured-JSON calls. Omitted for M2.x, which cannot
+      // disable thinking (llmService strips inline <think> blocks instead).
+      ...buildThinkingParam(env),
     }),
   });
 
