@@ -49,6 +49,7 @@ backend.log / frontend.log Runtime logs
 - ffmpeg
 - **Google Cloud Project**: Must enable **Vertex AI API** (Veo model used for video generation)
 - **Gemini API Key**: Used for storyboard script and image generation
+- **MiniMax API Key (optional)**: Switch text, frames, or clips to MiniMax-M3 / image-01 / MiniMax-H3
 
 ## Environment Variables
 Configure in `backend/.env` (copy from `.env.example`):
@@ -61,7 +62,20 @@ GEMINI_IMAGE_MODEL=gemini-3-pro-image-preview
 VERTEX_PROJECT_ID=your_gcp_project_id
 VERTEX_LOCATION=us-central1
 VERTEX_VEO_MODEL=veo-3.1-generate-preview
+
+# MiniMax (optional text / image / video provider)
+MINIMAX_API_KEY=
+MINIMAX_API_REGION=global_en   # global_en -> api.minimax.io, cn_zh -> api.minimaxi.com
+LLM_PROVIDER=                  # "minimax" routes storyboard + transition text to MiniMax-M3
+MINIMAX_TEXT_MODEL=MiniMax-M3
+IMAGE_PROVIDER=                # "minimax" uses image-01 for storyboard frames
+MINIMAX_IMAGE_MODEL=image-01
+VIDEO_PROVIDER=                # "minimax" generates clips with MiniMax-H3 instead of Vertex Veo
+MINIMAX_VIDEO_MODEL=MiniMax-H3
+MINIMAX_VIDEO_RESOLUTION=2K
 ```
+
+MiniMax is optional: leave `LLM_PROVIDER` / `IMAGE_PROVIDER` / `VIDEO_PROVIDER` empty to keep Gemini and Vertex, and image/video switch to MiniMax automatically once `MINIMAX_API_KEY` is set. `backend/.env.example` lists the remaining knobs (M3 thinking control, regional/host overrides, duration/ratio, callback URL).
 
 ## Quick Start (Recommended)
 No need to start backend and frontend separately. Run from the root directory:
