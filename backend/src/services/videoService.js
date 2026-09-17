@@ -197,7 +197,8 @@ const getMiniMaxVideoApiKey = () => {
   return apiKey.trim();
 };
 
-const isMiniMaxH3Max = (model) => String(model || '').includes('Max');
+// Note: a plain substring test matches every MiniMax model name ("MiniMax").
+const isMiniMaxH3Max = (model) => /-max$/i.test(String(model || '').trim());
 
 const normalizeMiniMaxVideoDuration = (durationSeconds, model) => {
   const configured = Number.parseInt(process.env.MINIMAX_VIDEO_DURATION || '', 10);
