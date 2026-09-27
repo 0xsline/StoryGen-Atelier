@@ -1,5 +1,8 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const { fetch } = require("undici");
+const grokClient = require('./grokClient');
+const grokCliService = require('./grokCliService');
+const { normalizeProvider } = require('./providers');
 
 const BASE_IMAGE_STYLE = process.env.GEMINI_IMAGE_STYLE || "Cinematic neon-noir, teal-magenta palette, volumetric rain and fog, soft bloom, anamorphic lens, shallow depth of field, subtle film grain, 16:9 composition";
 
@@ -108,18 +111,93 @@ const generateImageWithMiniMax = async (prompt) => {
   return firstImage;
 };
 
+// xAI Grok Imagine: text-to-image for the first frame, image-edits with the
+// first frame as reference for later shots (keeps the hero consistent).
+// Both endpoints answer { data: [{ url }] } or { data: [{ b64_json }] }.
+const extractGrokImage = (json) => {
+  const first = Array.isArray(json?.data) ? json.data[0] : null;
+  if (!first) throw new Error('Grok image response contained no data');
+  if (first.b64_json) {
+    return first.b64_json.startsWith('data:') ? first.b64_json : `data:image/jpeg;base64,${first.b64_json}`;
+  }
+  if (first.url) return first.url;
+  throw new Error('Grok image response contained neither b64_json nor url');
+};
+
+const generateImageWithGrok = async (imagePrompt, referenceImageBase64, { env, fetchImpl }) => {
+  const { imageModel } = grokClient.getConfig(env);
+  const common = {
+    model: imageModel,
+    aspect_ratio: '16:9',
+    resolution: (env.XAI_IMAGE_RESOLUTION || '').trim() || '1k',
+    response_format: 'b64_json',
+    n: 1,
+  };
+
+  if (referenceImageBase64) {
+    const body = {
+      ...common,
+      prompt: `Reference image shows the main character. Generate a new image where this SAME character (identical appearance, clothing, colors) performs the action described below:\n\n${imagePrompt}`,
+      image: { type: 'image_url', url: grokClient.toImageDataUri(referenceImageBase64) },
+    };
+    return extractGrokImage(await grokClient.request('/images/edits', { method: 'POST', env, fetchImpl, body: JSON.stringify(body) }));
+  }
+  return extractGrokImage(await grokClient.request('/images/generations', {
+    method: 'POST', env, fetchImpl, body: JSON.stringify({ ...common, prompt: imagePrompt }),
+  }));
+};
+
+const getImageProvider = (env) => normalizeProvider(env.IMAGE_PROVIDER);
+
 // Use Gemini 3 Pro Image Preview to generate frame-level artwork.
 // referenceImageBase64: base64 string of the first shot image (for character consistency)
 // heroSubject: detailed character description from shot 1
-exports.generateImage = async (prompt, previousStyleHint = "", styleOverride, referenceImageBase64 = null, heroSubject = "") => {
+// options: { env, fetchImpl, execImpl } for tests.
+exports.generateImage = async (prompt, previousStyleHint = "", styleOverride, referenceImageBase64 = null, heroSubject = "", options = {}) => {
+  const env = options.env || process.env;
   const imagePrompt = buildImagePrompt(prompt, previousStyleHint, styleOverride, heroSubject);
 
-  // Provider selection: set IMAGE_PROVIDER=minimax explicitly, or leave it
-  // empty to auto-detect MiniMax when MINIMAX_API_KEY is configured. Otherwise
-  // the existing provider path below is used.
-  const provider = (process.env.IMAGE_PROVIDER || '').trim().toLowerCase();
+  // Provider selection: IMAGE_PROVIDER = minimax | grok (xAI API) | grok-cli
+  // (Grok Build). Leave it empty to auto-detect MiniMax when MINIMAX_API_KEY
+  // is configured; otherwise the Gemini path below is used.
+  const provider = getImageProvider(env);
+
+  if (provider === 'grok') {
+    if (!grokClient.hasApiKey(env)) {
+      console.log('No valid XAI_API_KEY found. Using placeholder image.');
+      return placeholderImage(prompt);
+    }
+    try {
+      const imageUrl = await generateImageWithGrok(imagePrompt, referenceImageBase64, { env, fetchImpl: options.fetchImpl });
+      console.log('Image generated successfully via Grok Imagine.');
+      return imageUrl;
+    } catch (error) {
+      console.error('Error generating image with Grok Imagine:', error);
+      console.log('Falling back to placeholder.');
+      return placeholderImage(prompt);
+    }
+  }
+
+  if (provider === 'grok-cli') {
+    if (!grokCliService.isAvailable(env)) {
+      console.log('Grok Build CLI not found. Using placeholder image.');
+      return placeholderImage(prompt);
+    }
+    try {
+      const imageUrl = await grokCliService.generateImage(
+        { prompt: imagePrompt, referenceImage: referenceImageBase64 },
+        { env, execImpl: options.execImpl }
+      );
+      console.log('Image generated successfully via Grok Build CLI.');
+      return imageUrl;
+    } catch (error) {
+      console.error('Error generating image with Grok Build CLI:', error);
+      console.log('Falling back to placeholder.');
+      return placeholderImage(prompt);
+    }
+  }
   const useMiniMax = provider === 'minimax'
-    || (provider === '' && process.env.MINIMAX_API_KEY && process.env.MINIMAX_API_KEY.trim() !== '');
+    || (provider === '' && env.MINIMAX_API_KEY && env.MINIMAX_API_KEY.trim() !== '');
 
   if (useMiniMax) {
     try {

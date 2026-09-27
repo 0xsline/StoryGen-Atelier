@@ -20,6 +20,7 @@ frontend/dist/
 backend/data/videos/*
 !backend/data/videos/.gitkeep
 backend/data/tmp/
+backend/data/grok-cli/
 backend/data/gallery.db
 backend/data/gallery.json
 

@@ -1,7 +1,7 @@
 # StoryGen Atelier
 [English](README_EN.md) | [中文](README_CN.md)
 
-AI 辅助的分镜与视频生成工具。使用 Gemini 生成分镜文本与帧图，利用 Vertex AI Veo 生成过渡片段并拼接成全片，内置日志与画廊管理。
+AI 辅助的分镜与视频生成工具。使用 Gemini 生成分镜文本与帧图，利用 Vertex AI Veo 生成过渡片段并拼接成全片，内置日志与画廊管理。每个阶段也可切换为 MiniMax、xAI Grok API 或 Grok Build CLI。
 
 ![All Styles](exampleImg/all.png)
 
@@ -33,7 +33,7 @@ AI 辅助的分镜与视频生成工具。使用 Gemini 生成分镜文本与帧
 ## 技术栈
 - **前端**: React, Vite, Mantine UI (组件库)
 - **后端**: Node.js (Express), better-sqlite3 (高性能数据存储), fluent-ffmpeg (视频拼接)
-- **AI 服务**: Google Gemini (文本/图像), Google Vertex AI Veo (视频生成)
+- **AI 服务**: Google Gemini (文本/图像), Google Vertex AI Veo (视频生成)；可选 MiniMax、xAI Grok API（grok-4.6 + Grok Imagine）或 Grok Build CLI
 
 ## 目录结构
 ```
@@ -50,6 +50,8 @@ backend.log / frontend.log 运行期日志
 - **Google Cloud 项目**：必须启用 **Vertex AI API**（Veo 模型用于视频生成）
 - **Gemini API Key**：用于分镜脚本与图像生成
 - **MiniMax API Key（可选）**：配置后文本 / 帧图 / 片段可改走 MiniMax-M3 / image-01 / MiniMax-H3
+- **xAI API Key（可选）**：文本 / 帧图 / 片段可改走 grok-4.6 / Grok Imagine 图像 / Grok Imagine 视频
+- **Grok Build CLI（可选）**：通过 SuperGrok / X Premium+ 登录使用同样的 Grok 模型，无需 API Key
 
 ## 环境变量
 在 `backend/.env`（可复制 `.env.example`）配置：
@@ -73,9 +75,24 @@ MINIMAX_IMAGE_MODEL=image-01
 VIDEO_PROVIDER=                # 设为 "minimax" 时，视频片段走 MiniMax-H3（替代 Vertex Veo）
 MINIMAX_VIDEO_MODEL=MiniMax-H3
 MINIMAX_VIDEO_RESOLUTION=2K
+
+# xAI Grok API（可选：文本 / 图像 / 视频）
+XAI_API_KEY=
+LLM_PROVIDER=grok              # 或 IMAGE_PROVIDER=grok / VIDEO_PROVIDER=grok
+XAI_TEXT_MODEL=grok-4.6
+XAI_IMAGE_MODEL=grok-imagine-image-2.0
+XAI_VIDEO_MODEL=grok-imagine-video-1.5
+XAI_VIDEO_RESOLUTION=720p
+
+# Grok Build CLI（可选：先 `grok login`，再按阶段选择）
+LLM_PROVIDER=grok-cli          # 或 IMAGE_PROVIDER=grok-cli / VIDEO_PROVIDER=grok-cli
+GROK_CLI_BIN=                  # 留空则使用 PATH 中的 `grok`
+GROK_CLI_VIDEO_RESOLUTION=720p
 ```
 
-MiniMax 为可选路径：三个 PROVIDER 变量留空即沿用 Gemini/Vertex；图像与视频在配置 `MINIMAX_API_KEY` 后会自动切换。其余变量（M3 思考开关、区域/host 覆盖、时长与比例、回调地址等）见 `backend/.env.example`。
+通过 `LLM_PROVIDER` / `IMAGE_PROVIDER` / `VIDEO_PROVIDER` 按阶段选择提供方，取值为 `minimax`、`grok`（xAI API）或 `grok-cli`（Grok Build）。留空即沿用 Gemini/Vertex；图像与视频在配置 `MINIMAX_API_KEY` 后会自动切换到 MiniMax。其余变量见 `backend/.env.example`。
+
+**Grok Build CLI**：`curl -fsSL https://x.ai/cli/install.sh | bash` 安装，`grok login`（无浏览器环境用 `grok login --device-code`）登录，然后把对应的 `*_PROVIDER` 设为 `grok-cli`。后端以 headless 方式调用 `grok`：分镜文本走 `--prompt-json`，帧图走 `image_gen` / `image_edit` 工具，片段走 `reference_to_video`（固定首尾帧）或结尾镜头的 `image_to_video`。CLI 视频生成需要 SuperGrok 套餐。
 
 ## 快速启动 (推荐)
 无需分别启动前后端，直接在根目录运行：

@@ -1,5 +1,8 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const miniMaxTextService = require('./minimaxTextService');
+const grokTextService = require('./grokTextService');
+const grokCliService = require('./grokCliService');
+const { normalizeProvider, hasValidApiKey } = require('./providers');
 const { log } = require('../utils/logger');
 const fs = require('fs');
 const path = require('path');
@@ -68,25 +71,34 @@ const retry = async (fn, attempts = 2, delayMs = 400) => {
   throw lastErr;
 };
 
-const isMiniMaxTextProvider = () => (process.env.LLM_PROVIDER || '').trim().toLowerCase() === 'minimax';
+const getTextProvider = () => normalizeProvider(process.env.LLM_PROVIDER);
+const isMiniMaxTextProvider = () => getTextProvider() === 'minimax';
+const isGrokTextProvider = () => getTextProvider() === 'grok';
+const isGrokCliTextProvider = () => getTextProvider() === 'grok-cli';
 
-const hasValidApiKey = (apiKey) => Boolean(
-  apiKey && apiKey.trim() !== '' && !apiKey.startsWith('your_')
-);
+const hasConfiguredTextApiKey = () => {
+  if (isMiniMaxTextProvider()) return miniMaxTextService.hasApiKey();
+  if (isGrokTextProvider()) return grokTextService.hasApiKey();
+  if (isGrokCliTextProvider()) return grokCliService.isAvailable();
+  return hasValidApiKey(process.env.GEMINI_API_KEY);
+};
 
-const hasConfiguredTextApiKey = () => (
-  isMiniMaxTextProvider()
-    ? miniMaxTextService.hasApiKey()
-    : hasValidApiKey(process.env.GEMINI_API_KEY)
-);
-
-const getConfiguredTextModel = (fallbackModel = '') => (
-  isMiniMaxTextProvider() ? miniMaxTextService.getModel() : fallbackModel
-);
+const getConfiguredTextModel = (fallbackModel = '') => {
+  if (isMiniMaxTextProvider()) return miniMaxTextService.getModel();
+  if (isGrokTextProvider()) return grokTextService.getModel();
+  if (isGrokCliTextProvider()) return grokCliService.getConfig().model || 'grok-build';
+  return fallbackModel;
+};
 
 const generateTextContent = async (promptParts, fallbackModel) => {
   if (isMiniMaxTextProvider()) {
     return await miniMaxTextService.generateContent(promptParts);
+  }
+  if (isGrokTextProvider()) {
+    return await grokTextService.generateContent(promptParts);
+  }
+  if (isGrokCliTextProvider()) {
+    return await grokCliService.generateText(promptParts);
   }
 
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);

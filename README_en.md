@@ -1,7 +1,7 @@
 # StoryGen Atelier
 [English](README_EN.md) | [中文](README_CN.md)
 
-AI-assisted storyboard and video generation tool. Uses Gemini for generating storyboard text and frames, Vertex AI Veo for generating transition clips, and ffmpeg for stitching the final video. Built-in logs and gallery management.
+AI-assisted storyboard and video generation tool. Uses Gemini for generating storyboard text and frames, Vertex AI Veo for generating transition clips, and ffmpeg for stitching the final video. Every stage can also be switched to MiniMax, the xAI Grok API, or the Grok Build CLI. Built-in logs and gallery management.
 
 ![All Styles](exampleImg/all.png)
 
@@ -33,7 +33,7 @@ Once all clips (transition clips + closing clip) are generated, the backend uses
 ## Tech Stack
 - **Frontend**: React, Vite, Mantine UI (Component Library)
 - **Backend**: Node.js (Express), better-sqlite3 (High-performance data storage), fluent-ffmpeg (Video stitching)
-- **AI Services**: Google Gemini (Text/Image), Google Vertex AI Veo (Video Generation)
+- **AI Services**: Google Gemini (Text/Image), Google Vertex AI Veo (Video Generation); optional MiniMax, xAI Grok API (grok-4.6 + Grok Imagine), or Grok Build CLI for any stage
 
 ## Directory Structure
 ```
@@ -50,6 +50,8 @@ backend.log / frontend.log Runtime logs
 - **Google Cloud Project**: Must enable **Vertex AI API** (Veo model used for video generation)
 - **Gemini API Key**: Used for storyboard script and image generation
 - **MiniMax API Key (optional)**: Switch text, frames, or clips to MiniMax-M3 / image-01 / MiniMax-H3
+- **xAI API Key (optional)**: Switch text, frames, or clips to grok-4.6 / Grok Imagine image / Grok Imagine video
+- **Grok Build CLI (optional)**: Same Grok models through your SuperGrok / X Premium+ login, no API key needed
 
 ## Environment Variables
 Configure in `backend/.env` (copy from `.env.example`):
@@ -73,9 +75,24 @@ MINIMAX_IMAGE_MODEL=image-01
 VIDEO_PROVIDER=                # "minimax" generates clips with MiniMax-H3 instead of Vertex Veo
 MINIMAX_VIDEO_MODEL=MiniMax-H3
 MINIMAX_VIDEO_RESOLUTION=2K
+
+# xAI Grok API (optional text / image / video provider)
+XAI_API_KEY=
+LLM_PROVIDER=grok              # or IMAGE_PROVIDER=grok / VIDEO_PROVIDER=grok
+XAI_TEXT_MODEL=grok-4.6
+XAI_IMAGE_MODEL=grok-imagine-image-2.0
+XAI_VIDEO_MODEL=grok-imagine-video-1.5
+XAI_VIDEO_RESOLUTION=720p
+
+# Grok Build CLI (optional; `grok login` once, then pick it per stage)
+LLM_PROVIDER=grok-cli          # or IMAGE_PROVIDER=grok-cli / VIDEO_PROVIDER=grok-cli
+GROK_CLI_BIN=                  # leave empty to use `grok` from PATH
+GROK_CLI_VIDEO_RESOLUTION=720p
 ```
 
-MiniMax is optional: leave `LLM_PROVIDER` / `IMAGE_PROVIDER` / `VIDEO_PROVIDER` empty to keep Gemini and Vertex, and image/video switch to MiniMax automatically once `MINIMAX_API_KEY` is set. `backend/.env.example` lists the remaining knobs (M3 thinking control, regional/host overrides, duration/ratio, callback URL).
+Providers are selected per stage with `LLM_PROVIDER` / `IMAGE_PROVIDER` / `VIDEO_PROVIDER`, each accepting `minimax`, `grok` (xAI API), or `grok-cli` (Grok Build). Leave them empty to keep Gemini and Vertex; image and video switch to MiniMax automatically once `MINIMAX_API_KEY` is set. `backend/.env.example` lists the remaining knobs.
+
+**Grok Build CLI**: install with `curl -fsSL https://x.ai/cli/install.sh | bash`, run `grok login` (or `grok login --device-code` on a headless box), then set the `*_PROVIDER` variables to `grok-cli`. The backend drives `grok` headlessly: storyboard text via `--prompt-json`, frames via the `image_gen` / `image_edit` tools, and clips via `reference_to_video` (first + last frame pinned) or `image_to_video` for the closing shot. Video generation through the CLI needs a SuperGrok tier.
 
 ## Quick Start (Recommended)
 No need to start backend and frontend separately. Run from the root directory:

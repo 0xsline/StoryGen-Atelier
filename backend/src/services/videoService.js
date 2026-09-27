@@ -6,6 +6,9 @@ const { fetch } = require('undici');
 const { log } = require('../utils/logger');
 const { analyzeShotTransition } = require('./llmService');
 const { GoogleAuth } = require('google-auth-library');
+const grokVideoService = require('./grokVideoService');
+const grokCliService = require('./grokCliService');
+const { normalizeProvider } = require('./providers');
 const videoLogStore = require('./videoLogStore');
 
 const dataDir = path.join(__dirname, '../../data');
@@ -400,12 +403,53 @@ const generateClipWithVertex = async ({ prompt, model, firstFrame, lastFrame, du
   return { video_path: null, provider: 'vertex' }; // Should not reach here
 };
 
+// xAI Grok Imagine Video: image-to-video with the next shot pinned as last_frame.
+const generateClipWithGrok = async ({ prompt, firstFrame, lastFrame, durationSeconds }) => {
+  const downloadUrl = await grokVideoService.generateVideo({ prompt, firstFrame, lastFrame, durationSeconds });
+  const fileRes = await fetch(downloadUrl);
+  if (!fileRes.ok) throw new Error(`Failed to download Grok video: ${fileRes.status}`);
+  const buffer = Buffer.from(await fileRes.arrayBuffer());
+  const outPath = path.join(videoDir, `clip_grok_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.mp4`);
+  await fs.promises.writeFile(outPath, buffer);
+  return { video_path: outPath, provider: 'grok' };
+};
+
+// Grok Build CLI: reference_to_video (first + last frame) or image_to_video
+// (closing shot). The CLI saves the clip in its work dir; copy it next to the
+// other clips so stitching and cleanup stay in one place.
+const generateClipWithGrokCli = async ({ prompt, firstFrame, lastFrame, durationSeconds }) => {
+  const sourcePath = await grokCliService.generateVideo({ prompt, firstFrame, lastFrame, durationSeconds });
+  const outPath = path.join(videoDir, `clip_grokcli_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.mp4`);
+  // Move rather than copy so the Grok session folder does not keep a second
+  // full-size clip; fall back to copy+unlink across filesystems.
+  try {
+    await fs.promises.rename(sourcePath, outPath);
+  } catch (_) {
+    await fs.promises.copyFile(sourcePath, outPath);
+    await fs.promises.unlink(sourcePath).catch(() => {});
+  }
+  return { video_path: outPath, provider: 'grok-cli' };
+};
+
 // Main function: select the configured video provider.
+// VIDEO_PROVIDER = minimax | grok (xAI API) | grok-cli (Grok Build) | empty (Vertex Veo,
+// or MiniMax when MINIMAX_API_KEY is set).
 const generateClipDirectly = async (params) => {
     const firstFrame = await readImageBytes(params.first_frame_url);
     const lastFrame = await readImageBytes(params.last_frame_url);
 
-    const provider = (process.env.VIDEO_PROVIDER || '').trim().toLowerCase();
+    const provider = normalizeProvider(process.env.VIDEO_PROVIDER);
+
+    if (provider === 'grok') {
+      return await generateClipWithGrok({
+        prompt: params.prompt, firstFrame, lastFrame, durationSeconds: params.duration_seconds,
+      });
+    }
+    if (provider === 'grok-cli') {
+      return await generateClipWithGrokCli({
+        prompt: params.prompt, firstFrame, lastFrame, durationSeconds: params.duration_seconds,
+      });
+    }
     const useMiniMax = provider === 'minimax'
       || (provider === '' && process.env.MINIMAX_API_KEY && process.env.MINIMAX_API_KEY.trim() !== '');
 
