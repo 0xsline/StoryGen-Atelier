@@ -39,10 +39,10 @@ const MINIMAX_REGION_HOSTS = {
   cn_zh: 'https://api.minimaxi.com/v1',
 };
 
-const getMiniMaxBaseUrl = () => {
-  const explicit = process.env.MINIMAX_IMAGE_API_HOST;
+const getMiniMaxBaseUrl = (env = process.env) => {
+  const explicit = env.MINIMAX_IMAGE_API_HOST;
   if (explicit && explicit.trim() !== '') return explicit.trim().replace(/\/+$/, '');
-  const region = (process.env.MINIMAX_API_REGION || 'global_en').trim();
+  const region = (env.MINIMAX_API_REGION || 'global_en').trim();
   return MINIMAX_REGION_HOSTS[region] || MINIMAX_REGION_HOSTS.global_en;
 };
 
@@ -50,14 +50,16 @@ const getMiniMaxBaseUrl = () => {
 // image: a data URI when response_format=base64 (the frontend renders data
 // URIs directly), or the image URL otherwise. Returns null when no API key
 // is configured.
-const generateImageWithMiniMax = async (prompt) => {
-  const apiKey = process.env.MINIMAX_API_KEY;
+const generateImageWithMiniMax = async (prompt, referenceImageBase64 = null, options = {}) => {
+  const env = options.env || process.env;
+  const fetchImpl = options.fetchImpl || fetch;
+  const apiKey = env.MINIMAX_API_KEY;
   if (!apiKey || apiKey.trim() === '' || apiKey.startsWith('your_')) {
     return null;
   }
 
-  const model = process.env.MINIMAX_IMAGE_MODEL || 'image-01';
-  const responseFormat = process.env.MINIMAX_IMAGE_RESPONSE_FORMAT || 'base64';
+  const model = env.MINIMAX_IMAGE_MODEL || 'image-01';
+  const responseFormat = env.MINIMAX_IMAGE_RESPONSE_FORMAT || 'base64';
   const body = {
     model,
     prompt,
@@ -65,12 +67,20 @@ const generateImageWithMiniMax = async (prompt) => {
     response_format: responseFormat,
     n: 1,
   };
-  if (process.env.MINIMAX_PROMPT_OPTIMIZER === 'true') body.prompt_optimizer = true;
+  if (referenceImageBase64) {
+    body.subject_reference = [{
+      type: 'character',
+      image_file: referenceImageBase64.startsWith('data:')
+        ? referenceImageBase64
+        : `data:image/png;base64,${referenceImageBase64}`,
+    }];
+  }
+  if (env.MINIMAX_PROMPT_OPTIMIZER === 'true') body.prompt_optimizer = true;
 
-  const url = `${getMiniMaxBaseUrl()}/image_generation`;
+  const url = `${getMiniMaxBaseUrl(env)}/image_generation`;
   console.log('Generating image via MiniMax:', { model, responseFormat });
 
-  const res = await fetch(url, {
+  const res = await fetchImpl(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -123,7 +133,7 @@ exports.generateImage = async (prompt, previousStyleHint = "", styleOverride, re
 
   if (useMiniMax) {
     try {
-      const imageUrl = await generateImageWithMiniMax(imagePrompt);
+      const imageUrl = await generateImageWithMiniMax(imagePrompt, referenceImageBase64);
       if (imageUrl) {
         console.log('Image generated successfully via MiniMax.');
         return imageUrl;
@@ -199,3 +209,5 @@ exports.generateImage = async (prompt, previousStyleHint = "", styleOverride, re
   // Fallback Placeholder
   return placeholderImage(prompt);
 };
+
+exports.generateImageWithMiniMax = generateImageWithMiniMax;

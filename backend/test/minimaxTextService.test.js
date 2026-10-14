@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const miniMaxTextService = require('../src/services/minimaxTextService');
 const llmService = require('../src/services/llmService');
+const imageGenService = require('../src/services/imageGenService');
 
 const restoreEnv = (name, value) => {
   if (value === undefined) {
@@ -104,4 +105,37 @@ test('reports the configured MiniMax text model', () => {
     restoreEnv('LLM_PROVIDER', previousProvider);
     restoreEnv('MINIMAX_TEXT_MODEL', previousModel);
   }
+});
+
+test('forwards a reference image as a MiniMax subject reference', async () => {
+  let request;
+  const output = await imageGenService.generateImageWithMiniMax(
+    'A character walking through a rainy street.',
+    'aW1hZ2U=',
+    {
+      env: {
+        MINIMAX_API_KEY: 'test-key',
+        MINIMAX_API_REGION: 'cn_zh',
+        MINIMAX_IMAGE_RESPONSE_FORMAT: 'base64',
+      },
+      fetchImpl: async (url, options) => {
+        request = { url, body: JSON.parse(options.body) };
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: { image_base64: ['Z2VuZXJhdGVk'] },
+            base_resp: { status_code: 0 },
+          }),
+        };
+      },
+    }
+  );
+
+  assert.equal(request.url, 'https://api.minimaxi.com/v1/image_generation');
+  assert.deepEqual(request.body.subject_reference, [{
+    type: 'character',
+    image_file: 'data:image/png;base64,aW1hZ2U=',
+  }]);
+  assert.equal(output, 'data:image/jpeg;base64,Z2VuZXJhdGVk');
 });
