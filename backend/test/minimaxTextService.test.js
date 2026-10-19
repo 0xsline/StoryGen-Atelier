@@ -26,7 +26,7 @@ test('selects MiniMax regional endpoints', () => {
   );
   assert.equal(
     miniMaxTextService.getConfig({ MINIMAX_TEXT_MODEL: '   ' }).model,
-    'MiniMax-M3'
+    'MiniMax-M3.1-Flash'
   );
 });
 
@@ -53,11 +53,55 @@ test('sends MiniMax text completions to the configured region', async () => {
   assert.equal(request.url, 'https://api.minimaxi.com/v1/chat/completions');
   assert.equal(request.options.headers.Authorization, 'Bearer test-key');
   assert.deepEqual(JSON.parse(request.options.body), {
-    model: 'MiniMax-M3',
+    model: 'MiniMax-M3.1-Flash',
     messages: [{ role: 'user', content: 'Return a JSON array.' }],
     stream: false,
+    thinking: { type: 'adaptive' },
+    reasoning_effort: 'max',
   });
   assert.equal(output, '[]');
+});
+
+test('keeps Flash thinking adaptive and accepts its supported effort levels', async () => {
+  for (const effort of ['low', 'medium', 'high', 'xhigh', 'max', 'invalid']) {
+    let body;
+    await miniMaxTextService.generateContent([{ text: 'Return a JSON array.' }], {
+      env: {
+        MINIMAX_API_KEY: 'test-key',
+        MINIMAX_TEXT_MODEL: 'MiniMax-M3.1-Flash',
+        MINIMAX_TEXT_THINKING: 'disabled',
+        MINIMAX_TEXT_REASONING_EFFORT: effort,
+      },
+      fetchImpl: async (_url, options) => {
+        body = JSON.parse(options.body);
+        return { ok: true, json: async () => ({ choices: [{ message: { content: '[]' } }] }) };
+      },
+    });
+    assert.deepEqual(body.thinking, { type: 'adaptive' });
+    assert.equal(body.reasoning_effort, effort === 'invalid' ? 'max' : effort);
+    assert.equal(body.service_tier, undefined);
+  }
+});
+
+test('preserves M3 thinking controls without sending Flash effort', async () => {
+  for (const thinking of ['', 'adaptive', 'disabled']) {
+    let body;
+    await miniMaxTextService.generateContent([{ text: 'Return a JSON array.' }], {
+      env: {
+        MINIMAX_API_KEY: 'test-key',
+        MINIMAX_TEXT_MODEL: 'MiniMax-M3',
+        MINIMAX_TEXT_THINKING: thinking,
+        MINIMAX_TEXT_REASONING_EFFORT: 'low',
+      },
+      fetchImpl: async (_url, options) => {
+        body = JSON.parse(options.body);
+        return { ok: true, json: async () => ({ choices: [{ message: { content: '[]' } }] }) };
+      },
+    });
+    assert.equal(body.model, 'MiniMax-M3');
+    assert.deepEqual(body.thinking, thinking ? { type: thinking } : undefined);
+    assert.equal(body.reasoning_effort, undefined);
+  }
 });
 
 test('encodes image prompt parts for MiniMax multimodal input', async () => {

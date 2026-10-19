@@ -5,7 +5,7 @@ const REGION_BASE_URLS = Object.freeze({
   cn_zh: 'https://api.minimaxi.com/v1',
 });
 
-const DEFAULT_MODEL = 'MiniMax-M3';
+const DEFAULT_MODEL = 'MiniMax-M3.1-Flash';
 
 const normalizeBaseUrl = (value) => value.replace(/\/+$/, '');
 
@@ -29,7 +29,15 @@ const hasApiKey = (env = process.env) => {
 
 const getModel = (env = process.env) => getConfig(env).model;
 
-const buildThinkingParam = (env = process.env) => {
+const buildThinkingParam = (model, env = process.env) => {
+  if (model === 'MiniMax-M3.1-Flash') {
+    const effort = (env.MINIMAX_TEXT_REASONING_EFFORT || '').trim().toLowerCase();
+    return {
+      thinking: { type: 'adaptive' },
+      reasoning_effort: ['low', 'medium', 'high', 'xhigh', 'max'].includes(effort) ? effort : 'max',
+    };
+  }
+
   const value = (env.MINIMAX_TEXT_THINKING || '').trim().toLowerCase();
   return value === 'disabled' || value === 'adaptive' ? { thinking: { type: value } } : {};
 };
@@ -94,10 +102,9 @@ const generateContent = async (promptParts, options = {}) => {
         },
       ],
       stream: false,
-      // M3 defaults to adaptive thinking; set MINIMAX_TEXT_THINKING=disabled to
-      // skip reasoning for structured-JSON calls. Omitted for M2.x, which cannot
-      // disable thinking (llmService strips inline <think> blocks instead).
-      ...buildThinkingParam(env),
+      // Flash always uses adaptive thinking; M3 also permits disabled thinking.
+      // llmService strips inline <think> blocks before parsing structured JSON.
+      ...buildThinkingParam(model, env),
     }),
   });
 

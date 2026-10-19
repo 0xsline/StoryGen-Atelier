@@ -96,9 +96,8 @@ const generateTextContent = async (promptParts, fallbackModel) => {
   return response.text();
 };
 
-// MiniMax M3 defaults to adaptive thinking and returns the reasoning inline as
-// <think>...</think> inside message.content (M2.x cannot disable it either), so
-// strip reasoning blocks before parsing structured JSON.
+// MiniMax adaptive thinking can return reasoning inline as <think>...</think>
+// inside message.content, so strip reasoning blocks before parsing structured JSON.
 const stripReasoning = (text) => String(text).replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 
 exports.getConfiguredTextModel = getConfiguredTextModel;

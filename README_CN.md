@@ -49,7 +49,7 @@ backend.log / frontend.log 运行期日志
 - ffmpeg
 - **Google Cloud 项目**：必须启用 **Vertex AI API**（Veo 模型用于视频生成）
 - **Gemini API Key**：用于分镜脚本与图像生成
-- **MiniMax API Key（可选）**：配置后文本 / 帧图 / 片段可改走 MiniMax-M3 / image-01 / MiniMax-H3
+- **MiniMax API Key (optional)**: Switch text, frames, or clips to MiniMax-M3.1-Flash / image-01 / MiniMax-H3
 
 ## 环境变量
 在 `backend/.env`（可复制 `.env.example`）配置：
@@ -66,14 +66,16 @@ VERTEX_VEO_MODEL=veo-3.1-generate-preview
 # MiniMax（可选：文本 / 图像 / 视频）
 MINIMAX_API_KEY=
 MINIMAX_API_REGION=global_en   # global_en -> api.minimax.io，cn_zh -> api.minimaxi.com
-LLM_PROVIDER=                  # 设为 "minimax" 时，分镜与转场文本走 MiniMax-M3
-MINIMAX_TEXT_MODEL=MiniMax-M3
+LLM_PROVIDER=                  # "minimax" routes storyboard + transition text to MiniMax
+MINIMAX_TEXT_MODEL=MiniMax-M3.1-Flash  # Or MiniMax-M3
 IMAGE_PROVIDER=                # 设为 "minimax" 时，分镜帧图走 image-01
 MINIMAX_IMAGE_MODEL=image-01
 VIDEO_PROVIDER=                # 设为 "minimax" 时，视频片段走 MiniMax-H3（替代 Vertex Veo）
 MINIMAX_VIDEO_MODEL=MiniMax-H3
 MINIMAX_VIDEO_RESOLUTION=2K
 ```
+
+MiniMax-M3.1-Flash always uses adaptive thinking. `MINIMAX_TEXT_REASONING_EFFORT` accepts `low`, `medium`, `high`, `xhigh`, or `max` (default). MiniMax-M3 also supports `MINIMAX_TEXT_THINKING=disabled` and ignores the effort setting. See the [MiniMax text API reference](https://platform.minimax.io/docs/api-reference/text-chat-openai.md).
 
 MiniMax 为可选路径：三个 PROVIDER 变量留空即沿用 Gemini/Vertex；图像与视频在配置 `MINIMAX_API_KEY` 后会自动切换。其余变量（M3 思考开关、区域/host 覆盖、时长与比例、回调地址等）见 `backend/.env.example`。
 
